@@ -20,13 +20,20 @@ const userResolver = {
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
+        const boyProfilePic = `https://avatar.iran.liara.run/public/boy?username=${username}`;
+
+        const girlProfilePic = `https://avatar.iran.liara.run/public/girl?username=${username}`;
+
+        const profilePic = gender === "male" ? boyProfilePic : girlProfilePic;
+
         const user = await User.create({
           username,
           name,
           password: hashedPassword,
           gender,
+          profilePic,
         });
-
+        await context.login(user);
         return res.status(201).json({
           message: "User created successfully",
           user,
@@ -35,13 +42,51 @@ const userResolver = {
         console.log(error);
       }
     },
+    login: async (_, { input }, context) => {
+      try {
+        const { username, password } = input;
+        const { user } = await context.authenticate("session", {
+          username,
+          password,
+        });
+
+        await context.login(user);
+        return user;
+      } catch (error) {
+        console.log(error);
+        res.status(401).json({ message: "Invalid credentials" });
+      }
+    },
+    logout: async (_, __, { req, res }) => {
+      try {
+        await context.logout();
+        req.session.destroy((err) => {
+          if (err) throw err;
+          res.clearCookie("connect.sid");
+          res.status(200).json({ message: "Logged out successfully" });
+        });
+      } catch (error) {
+        console.log(error);
+        res.status(401).json({ message: "error in logout" });
+      }
+    },
   },
   Query: {
-    users: (_, _, { req, res }) => {
-      return users;
+    authUser: async (_, _, context) => {
+      try {
+        const user = await context.getUser();
+        return user;
+      } catch (error) {
+        throw new Error("Internal server error");
+      }
     },
-    user: (_, { userId }) => {
-      return users.find((item) => item._id === userId);
+    user: async (_, { userId }) => {
+      try {
+        const user = await User.findById(userId);
+        return user;
+      } catch (error) {
+        throw new Error("Internal server error" || error.message);
+      }
     },
   },
 };
